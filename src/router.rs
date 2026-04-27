@@ -7,7 +7,8 @@ use rmcp::{
 
 use scxml::{export, parse_xml, validate};
 
-use crate::tools::{HealthCheck, ValidateStateChart, VisualiseStateChart};
+use crate::tools::{HealthCheck, ToolError, ValidateStateChart, VisualiseStateChart};
+
 #[derive(Clone)]
 pub struct Charta {
     pub tool_router: ToolRouter<Self>,
@@ -38,14 +39,9 @@ impl Charta {
         &self,
         Parameters(ValidateStateChart { state_chart }): Parameters<ValidateStateChart>,
     ) -> Result<CallToolResult, ErrorData> {
-        let chart = parse_xml(&state_chart).unwrap();
-        match validate(&chart) {
-            Ok(_) => Ok(CallToolResult::success(vec![Content::text(format!("OK"))])),
-            Err(e) => Ok(CallToolResult::success(vec![Content::text(format!(
-                "Error: {}",
-                e
-            ))])),
-        }
+        let chart = parse_xml(&state_chart).map_err(ToolError::Parse)?;
+        validate(&chart).map_err(ToolError::Validate)?;
+        Ok(CallToolResult::success(vec![Content::text(format!("OK"))]))
     }
 
     #[tool(
@@ -55,7 +51,8 @@ impl Charta {
         &self,
         Parameters(VisualiseStateChart { state_chart }): Parameters<VisualiseStateChart>,
     ) -> Result<CallToolResult, ErrorData> {
-        let chart = parse_xml(&state_chart).unwrap();
+        let chart = parse_xml(&state_chart).map_err(ToolError::Parse)?;
+        validate(&chart).map_err(ToolError::Validate)?;
 
         let dot = export::mermaid::to_mermaid(&chart);
         Ok(CallToolResult::success(vec![Content::text(dot)]))
