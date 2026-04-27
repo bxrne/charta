@@ -8,3 +8,8 @@ pub struct HealthCheck {}
 pub struct ValidateStateChart {
     pub state_chart: String,
 }
+
+#[derive(Deserialize, JsonSchema)]
+pub struct VisualiseStateChart {
+    pub state_chart: String,
+}
