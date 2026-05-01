@@ -21,9 +21,9 @@ use tokio::process::Command;
 
 use scxml::{export, parse_xml, validate};
 
-use crate::tools::{
-    CodegenStateChart, ToolError, ValidateStateChart, VisualiseStateChart,
-};
+use crate::{tools::{
+    CodegenStateChart, ToolError, ValidateStateChart, VerifyStateChart, VisualiseStateChart
+}, verify};
 
 /// MCP server handler for charta.
 ///
@@ -86,6 +86,25 @@ impl Charta {
         // `to_mermaid` is infallible on a validated chart.
         let dot = export::mermaid::to_mermaid(&chart);
         Ok(CallToolResult::success(vec![Content::text(dot)]))
+    }
+
+    /// `verify_state_chart` — verify properties hold 
+    ///
+    /// Returns the result of solving the proofs
+    /// Returns artefacts
+    #[tool(
+        description = "Verify the properties defined hold in a given statechart XML."
+    )]
+    pub async fn verify_state_chart(
+        &self,
+        Parameters(VerifyStateChart { state_chart, tool }): Parameters<VerifyStateChart>,
+    ) -> Result<CallToolResult, ErrorData> {
+        // As before, validate structure first
+        let chart = parse_xml(&state_chart).map_err(ToolError::Parse)?;
+        validate(&chart).map_err(ToolError::Validate)?;
+        // Now run the chosen verification tool
+        verify::verify(&state_chart, tool)?;
+        Ok(CallToolResult::success(vec![Content::text(format!("OK"))]))
     }
 
     /// `codegen_state_chart` — generate source code for the requested backend

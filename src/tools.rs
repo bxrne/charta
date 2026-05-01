@@ -11,6 +11,8 @@ use schemars::JsonSchema;
 use scxml::ScxmlError;
 use serde::Deserialize;
 
+
+
 /// Arguments for the `validate_state_chart` tool.
 ///
 /// `state_chart` is the raw SCXML XML document the caller wants validated.
@@ -19,6 +21,27 @@ pub struct ValidateStateChart {
     /// Raw SCXML XML to parse and structurally validate.
     pub state_chart: String,
 }
+
+/// Arguments for the `verify_state_chart` tool.
+///
+/// `state_chart` is the raw SCXML XML document the caller wants verified if it contains any
+/// verification.
+#[derive(Deserialize, JsonSchema)]
+pub struct VerifyStateChart {
+    /// Raw SCXML XML to parse and formally verify 
+    pub state_chart: String,
+    // Verifaction tool to use, e.g. "smt" or "k-induction"
+    pub tool: VerificationTool,
+}
+
+// Supported verification tools. 
+#[derive(Deserialize, JsonSchema, Debug, Clone, Copy)]
+pub enum VerificationTool {
+    Smt,
+    KInduction
+}
+
+
 
 /// Arguments for the `visualise_state_chart` tool.
 #[derive(Deserialize, JsonSchema)]
@@ -94,6 +117,10 @@ pub enum ToolError {
     /// `sce-codegen` ran but exited non-zero; payload is its captured stderr.
     #[error("sce-codegen failed: {0}")]
     CodegenFailed(String),
+
+    // `verify` ran but failed. artefacts returned.
+    #[error("verification failed")]
+    VerifyFailed
 }
 
 impl From<ToolError> for ErrorData {
@@ -106,6 +133,7 @@ impl From<ToolError> for ErrorData {
         let msg = err.to_string();
         match err {
             ToolError::Parse(_) | ToolError::Validate(_) => ErrorData::invalid_params(msg, None),
+            ToolError::VerifyFailed |
             ToolError::BinaryNotFound | ToolError::Io(_) | ToolError::CodegenFailed(_) => {
                 ErrorData::internal_error(msg, None)
             }

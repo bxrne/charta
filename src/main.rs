@@ -14,6 +14,7 @@ use rmcp::{ServiceExt, transport::io::stdio};
 // structs and the shared `ToolError` type.
 mod router;
 mod tools;
+mod verify;
 
 use crate::router::Charta;
 
