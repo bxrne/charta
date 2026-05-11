@@ -88,23 +88,50 @@ impl Charta {
         Ok(CallToolResult::success(vec![Content::text(dot)]))
     }
 
-    /// `verify_state_chart` — verify properties hold 
+    /// `verify_state_chart` — formally verify properties declared in the chart.
     ///
-    /// Returns the result of solving the proofs
-    /// Returns artefacts
+    /// Properties are declared as XML comment pragmas in the SCXML document:
+    ///
+    /// ```xml
+    /// <!-- @invariant id="exclusive_doors" expr="not (in('open') and in('closing'))" -->
+    /// ```
+    ///
+    /// The expression language supports `in('STATE')`, `not`, `and`, `or`,
+    /// `=>`, `<=>`, `true`, `false`, and parens. Returns one text content
+    /// block per declared invariant with the verdict (HOLDS / BOUNDED-SAFE
+    /// / VIOLATED / UNKNOWN) and a counterexample trace where applicable.
+    ///
+    /// Backends:
+    /// * `Smt` — bounded model checking. Finds bugs up to a fixed depth;
+    ///   UNSAT is **not** a proof, only "no bug within N steps".
+    /// * `KInduction` — k-induction. UNSAT on both base and inductive step
+    ///   constitutes a real proof.
+    ///
+    /// Limitations: flat charts only (no `<parallel>`, no nested states);
+    /// guards and datamodel are treated as nondeterministic; events are
+    /// modelled as an opaque alphabet.
     #[tool(
-        description = "Verify the properties defined hold in a given statechart XML."
+        description = "Formally verify invariants declared in an SCXML chart via Z3. Properties are declared with `<!-- @invariant id=\"NAME\" expr=\"EXPR\" -->` pragmas; the expression language is `in('STATE')`, `not`, `and`, `or`, `=>`, `<=>`, `true`, `false`. Backends: `Smt` (bounded model checking; finds bugs only) or `KInduction` (real proofs)."
     )]
     pub async fn verify_state_chart(
         &self,
         Parameters(VerifyStateChart { state_chart, tool }): Parameters<VerifyStateChart>,
     ) -> Result<CallToolResult, ErrorData> {
-        // As before, validate structure first
+        // As before, validate structure first so verification can rely on a
+        // well-formed AST and so we surface parse/validate errors with the
+        // same shape as the other tools.
         let chart = parse_xml(&state_chart).map_err(ToolError::Parse)?;
         validate(&chart).map_err(ToolError::Validate)?;
-        // Now run the chosen verification tool
-        verify::verify(&state_chart, tool)?;
-        Ok(CallToolResult::success(vec![Content::text(format!("OK"))]))
+
+        // Run the chosen backend over every declared invariant. Each verdict
+        // becomes its own content block — mirrors how `codegen_state_chart`
+        // returns multiple files, so clients can route them independently.
+        let verdicts = verify::verify(&state_chart, tool)?;
+        let blocks: Vec<Content> = verdicts
+            .into_iter()
+            .map(|v| Content::text(v.render()))
+            .collect();
+        Ok(CallToolResult::success(blocks))
     }
 
     /// `codegen_state_chart` — generate source code for the requested backend
@@ -206,9 +233,9 @@ impl Charta {
                 .to_string();
             let body = std::fs::read_to_string(&path).map_err(ToolError::Io)?;
             // Each file gets its own content block, prefixed with a
-            // `// === <name> ===` banner so multi-file backends (cpp, c11)
-            // remain trivially separable on the client side.
-            contents.push(Content::text(format!("// === {name} ===\n{body}")));
+            // filename banner so multi-file backends (cpp, c11) remain
+            // trivially separable on the client side.
+            contents.push(Content::text(format!("// file: {name}\n{body}")));
         }
 
         // Defensive: if `sce-codegen` exited 0 but produced nothing, treat

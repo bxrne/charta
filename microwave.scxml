@@ -1,0 +1,86 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="door_closed">
+  <!--
+    Microwave oven controller — flat statechart for the charta verifier.
+
+    Demonstrates a mix of verification outcomes:
+      * Safety mutexes the verifier proves via k-induction (HOLDS).
+      * Coverage invariants that follow from the transition graph (HOLDS).
+      * Deliberately false invariants that produce concrete counter-
+        example traces (VIOLATED).
+  -->
+
+  <datamodel>
+    <data id="seconds_remaining" expr="0"/>
+  </datamodel>
+
+  <!-- ─────────── invariants the verifier should PROVE (HOLDS) ─────────── -->
+
+  <!-- Distinct atomic states are mutually exclusive by construction; this
+       proves trivially via k-induction (k=1) and is the canonical "safety"
+       check: never cooking while the door is open. -->
+  <!-- @invariant id="no_cook_with_door_open" expr="not (in('cooking') and in('door_open'))" -->
+
+  <!-- Same idea for paused vs finished — they are different lifecycle phases
+       and must never both be active. -->
+  <!-- @invariant id="paused_xor_finished" expr="not (in('paused') and in('finished'))" -->
+
+  <!-- Coverage: at every reachable step the system must be in one of the
+       five declared states. Holds inductively because every transition
+       lands in one of them. -->
+  <!-- @invariant id="state_coverage" expr="in('door_closed') or in('door_open') or in('cooking') or in('paused') or in('finished')" -->
+
+  <!-- Implication form: if we're cooking, we must NOT also be in any
+       door-related state. Same content as `no_cook_with_door_open` but
+       expressed via `=>` to exercise that operator. -->
+  <!-- @invariant id="cooking_implies_door_shut" expr="in('cooking') => not in('door_open')" -->
+
+  <!-- Biconditional: paused and finished are never simultaneously active,
+       and never simultaneously inactive *with cooking* — paused/finished/
+       cooking partition the "machine is busy" subspace. Written awkwardly
+       to exercise `<=>`. -->
+  <!-- @invariant id="busy_states_consistent" expr="(in('paused') or in('finished')) <=> not (in('door_closed') or in('door_open') or in('cooking'))" -->
+
+  <!-- ─────────── invariants the verifier should REFUTE (VIOLATED) ─────────── -->
+
+  <!-- Initial state IS door_closed, so this is false at frame 0 — the
+       counterexample trace will be a single step. Useful for confirming
+       the verifier reports CEXs for the base case. -->
+  <!-- @invariant id="never_door_closed_BUG" expr="not in('door_closed')" -->
+
+  <!-- The cooking state is reachable from door_closed via `start`, so this
+       must yield a multi-step counterexample trace. -->
+  <!-- @invariant id="never_cooks_BUG" expr="not in('cooking')" -->
+
+  <!-- ─────────── states ─────────── -->
+
+  <state id="door_closed">
+    <transition event="open" target="door_open"/>
+    <transition event="start" target="cooking"/>
+  </state>
+
+  <state id="door_open">
+    <transition event="close" target="door_closed"/>
+  </state>
+
+  <state id="cooking">
+    <onentry>
+      <assign location="seconds_remaining" expr="60"/>
+    </onentry>
+    <transition event="door_opened" target="paused"/>
+    <transition event="stop" target="door_closed"/>
+    <transition event="timer" target="finished"/>
+  </state>
+
+  <state id="paused">
+    <transition event="close" target="cooking"/>
+    <transition event="stop" target="door_closed"/>
+  </state>
+
+  <state id="finished">
+    <onentry>
+      <assign location="seconds_remaining" expr="0"/>
+    </onentry>
+    <transition event="door_opened" target="door_open"/>
+    <transition event="reset" target="door_closed"/>
+  </state>
+</scxml>

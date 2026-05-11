@@ -12,3 +12,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 tempfile = "3.27.0"
 thiserror = "2.0.18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "process"] }
+z3 = "0.20.0"

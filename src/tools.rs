@@ -118,22 +118,32 @@ pub enum ToolError {
     #[error("sce-codegen failed: {0}")]
     CodegenFailed(String),
 
-    // `verify` ran but failed. artefacts returned.
-    #[error("verification failed")]
-    VerifyFailed
+    /// Verification was asked to do something it doesn't yet support
+    /// (hierarchical states, multi-target transitions, etc.). User-facing
+    /// constraint, not an internal error.
+    #[error("unsupported feature for verification: {0}")]
+    Unsupported(String),
+
+    /// An `<!-- @invariant ... -->` pragma's `expr=` failed to parse.
+    /// Caller's fault — the property language is the user-facing input.
+    #[error("invalid invariant property: {0}")]
+    PropertyParse(String),
 }
 
 impl From<ToolError> for ErrorData {
     /// Project the rich [`ToolError`] onto the limited MCP error vocabulary.
     ///
-    /// * Bad SCXML input is the caller's fault → `invalid_params`.
+    /// * Bad SCXML input or bad property syntax is the caller's fault →
+    ///   `invalid_params`.
     /// * Anything else (missing binary, I/O, codegen crash) is server-side →
     ///   `internal_error`.
     fn from(err: ToolError) -> Self {
         let msg = err.to_string();
         match err {
-            ToolError::Parse(_) | ToolError::Validate(_) => ErrorData::invalid_params(msg, None),
-            ToolError::VerifyFailed |
+            ToolError::Parse(_)
+            | ToolError::Validate(_)
+            | ToolError::Unsupported(_)
+            | ToolError::PropertyParse(_) => ErrorData::invalid_params(msg, None),
             ToolError::BinaryNotFound | ToolError::Io(_) | ToolError::CodegenFailed(_) => {
                 ErrorData::internal_error(msg, None)
             }
